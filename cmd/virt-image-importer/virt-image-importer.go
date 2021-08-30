@@ -23,6 +23,8 @@ type client struct {
 
 const (
 	ExportImageFormat = "vmdk"
+	S3PrefixFormat    = "kubevirt-image-exports/orig-%s-"
+	OrigAmiTagKey     = "original-ami"
 )
 
 func NewClient(region string) (*client, error) {
@@ -78,6 +80,7 @@ func (c *client) ExportImage(amiId string, s3Bucket string, s3Prefix string, ima
 		return "", fmt.Errorf("Image format %s is unsupported, only image format 'vmdk' is supported", imageFormat)
 	}
 
+	tagKey := OrigAmiTagKey
 	description := fmt.Sprintf("Exporting ami %s for import into KubeVirt cluster", amiId)
 	params := &ec2.ExportImageInput{
 		DiskImageFormat: types.DiskImageFormatVmdk,
@@ -87,6 +90,17 @@ func (c *client) ExportImage(amiId string, s3Bucket string, s3Prefix string, ima
 			S3Prefix: &s3Prefix,
 		},
 		Description: &description,
+		TagSpecifications: []types.TagSpecification{
+			{
+				ResourceType: types.ResourceTypeExportImageTask,
+				Tags: []types.Tag{
+					{
+						Key:   &tagKey,
+						Value: &amiId,
+					},
+				},
+			},
+		},
 	}
 
 	amiExportOutput, err := c.ec2Client.ExportImage(context.Background(), params, func(o *ec2.Options) {
@@ -104,50 +118,78 @@ func (c *client) ExportImage(amiId string, s3Bucket string, s3Prefix string, ima
 	return *amiExportOutput.ExportImageTaskId, nil
 }
 
-func (c *client) GetExportTaskStatus(exportTaskId string) (string, error) {
+func (c *client) GetExportTaskStatus(exportTaskId string, amiId string) (s3Bucket string, s3FilePath string, completed bool, exists bool, err error) {
+
+	filterName := fmt.Sprintf("tag:%s", OrigAmiTagKey)
+	filterValues := []string{amiId}
 	params := &ec2.DescribeExportImageTasksInput{
-		ExportImageTaskIds: []string{exportTaskId},
+		Filters: []types.Filter{
+			{
+				Name:   &filterName,
+				Values: filterValues,
+			},
+		},
+	}
+	if exportTaskId != "" {
+		params.ExportImageTaskIds = []string{exportTaskId}
 	}
 
 	exportTaskOutput, err := c.ec2Client.DescribeExportImageTasks(context.Background(), params, func(o *ec2.Options) {
 		o.Region = c.region
 	})
 	if err != nil {
-		return "", err
+		return "", "", false, false, err
 	}
 
-	if len(exportTaskOutput.ExportImageTasks) == 0 || exportTaskOutput.ExportImageTasks[0].Status == nil {
-		return "", fmt.Errorf("Export task id %d not found. Unable to track export", exportTaskId)
+	if len(exportTaskOutput.ExportImageTasks) == 0 {
+		return "", "", false, false, nil
 	}
 
-	return *exportTaskOutput.ExportImageTasks[0].Status, nil
+	exists = true
+	for _, task := range exportTaskOutput.ExportImageTasks {
+		if task.Status == nil || *task.Status != "completed" {
+			continue
+		}
+
+		s3Bucket = *task.S3ExportLocation.S3Bucket
+		s3FilePath = fmt.Sprintf("%s%s.%s", *task.S3ExportLocation.S3Prefix, *task.ExportImageTaskId, ExportImageFormat)
+		completed = true
+		break
+	}
+
+	return s3Bucket, s3FilePath, completed, exists, nil
 }
 
-func (c *client) WaitForExportImageCompletion(taskId string, timeout time.Duration) error {
+func (c *client) WaitForExportImageCompletion(amiId string, taskId string, timeout time.Duration) (s3Bucket string, s3FilePath string, err error) {
+	var completed bool
+	var exists bool
 	ticker := time.NewTicker(timeout).C
 	pollTicker := time.NewTicker(time.Second * 15).C
 
 	log.Printf("Polling task id %s to determine if it is completed", taskId)
-	status, _ := c.GetExportTaskStatus(taskId)
-	if status == "completed" {
-		return nil
+	s3Bucket, s3FilePath, completed, _, _ = c.GetExportTaskStatus(taskId, amiId)
+	if completed {
+		return
 	}
 
 	// if not available, poll until available or timeout is hit
 	for {
 		select {
 		case <-ticker:
-			return fmt.Errorf("timed out waiting for task id %s to become complete", taskId)
+			return "", "", fmt.Errorf("timed out waiting for task id %s to become complete", taskId)
 		case <-pollTicker:
 			log.Printf("Polling task id %s to determine if it is completed", taskId)
 
-			status, err := c.GetExportTaskStatus(taskId)
+			s3Bucket, s3FilePath, completed, exists, err = c.GetExportTaskStatus(taskId, amiId)
 			if err != nil {
 				log.Printf("err encountered looking up task id %s: %v", taskId, err)
 				continue
-			} else if status == "completed" {
+			} else if !exists {
+				log.Printf("Task id %s does not exist", taskId)
+				return
+			} else if completed {
 				log.Printf("Task id %s completed", taskId)
-				return nil
+				return
 			}
 		}
 	}
@@ -182,10 +224,6 @@ func (c *client) FindImageByName(amiName string, accountId string) (*types.Image
 
 func (c *client) CopyImageName(amiId string) string {
 	return fmt.Sprintf("kubevirt-export-automation-copy-%s", amiId)
-}
-
-func (c *client) ExpectedImageS3Key(amiId string, imageFormat string) string {
-	return fmt.Sprintf("export-%s.%s", amiId, imageFormat)
 }
 
 func (c *client) CopyImage(amiId string, amiCopyName string) (string, error) {
@@ -237,31 +275,6 @@ func (c *client) IsImageAvailable(amiId string) (bool, error) {
 	return false, nil
 }
 
-func (c *client) IsImageExported(s3Bucket string, s3Prefix string, amiId string, imageFormat string) (bool, error) {
-
-	fullPrefix := s3Prefix + c.ExpectedImageS3Key(amiId, imageFormat)
-
-	log.Printf("Searching for export in bucket %s with prefix %s", s3Bucket, fullPrefix)
-
-	params := &s3.ListObjectsInput{
-		Bucket: &s3Bucket,
-		Prefix: &fullPrefix,
-	}
-	listOutput, err := c.s3Client.ListObjects(context.Background(), params, func(o *s3.Options) {
-		o.Region = c.region
-	})
-
-	if err != nil {
-		return false, err
-	} else if len(listOutput.Contents) == 0 {
-		return false, nil
-	} else if len(listOutput.Contents) > 1 {
-		return false, fmt.Errorf("found multiple matching s3 exports for ami %s", amiId)
-	}
-
-	return true, nil
-}
-
 func (c *client) WaitForImageToBecomeAvailable(amiId string, timeout time.Duration) error {
 	ticker := time.NewTicker(timeout).C
 	pollTicker := time.NewTicker(time.Second * 15).C
@@ -296,12 +309,10 @@ func main() {
 	var region string
 	var amiId string
 	var s3Bucket string
-	var s3Prefix string
 
 	flag.StringVar(&region, "region", "", "The AWS region the AMI resides in. NOTE: if the AMI is shared from another account, a copy of the AMI will be created in the client's account in order to import to KubeVirt")
 	flag.StringVar(&amiId, "ami-id", "", "The ID of the ami to import")
 	flag.StringVar(&s3Bucket, "s3-bucket", "", "The s3 bucket to use to store and deliver the AMI into kubevirt")
-	flag.StringVar(&s3Prefix, "s3-prefix", "kubevirt-image-exports/", "The s3 directory prefix to use to store the AMIs being exported into kubevirt")
 	flag.Parse()
 
 	if amiId == "" {
@@ -375,35 +386,30 @@ func main() {
 	// ----------------
 	// Step 3: Export AMI to s3 bucket
 	// ----------------
-
-	exists, err := cli.IsImageExported(s3Bucket, s3Prefix, amiToExport, ExportImageFormat)
-	if err != nil {
-		log.Fatalf("Error encountered determining if image is exported to s3 bucket: %v", err)
-	}
-
-	// TODO
-	// - Determine if task for ami already exists or not
-	// - If task already exists, is it completed?
-	// - If it is completed, does s3 export file still exist?
-	//
-	// If all of that is true, then skip the export step
-	//
-	//
-
+	foundS3Bucket, foundS3FilePath, completed, exists, err := cli.GetExportTaskStatus("", amiToExport)
 	if !exists {
 		log.Printf("Exporting ami %s to s3 bucket %s", amiToExport, s3Bucket)
-		/*
-			taskId, err := cli.ExportImage(amiToExport, s3Bucket, s3Prefix, exportImageFormat)
-			if err != nil {
-				log.Fatalf("Creation of export task for AMI %s to s3 failed: %v", amiToExport, err)
-			}
+		s3Prefix := fmt.Sprintf(S3PrefixFormat, amiToExport)
 
-			err = cli.WaitForExportImageCompletion(taskId, time.Minute*15)
-			if err != nil {
-				log.Fatalf("Exporting of AMI %s to s3 failed: %v", amiToExport, err)
-			}
-		*/
+		taskId, err := cli.ExportImage(amiToExport, s3Bucket, s3Prefix, ExportImageFormat)
+		if err != nil {
+			log.Fatalf("Creation of export task for AMI %s to s3 failed: %v", amiToExport, err)
+		}
+
+		foundS3Bucket, foundS3FilePath, err = cli.WaitForExportImageCompletion(amiToExport, taskId, time.Minute*15)
+		if err != nil {
+			log.Fatalf("Exporting of AMI %s to s3 failed: %v", amiToExport, err)
+		}
+	} else if !completed {
+		log.Printf("Waiting for existing image export job to complete")
+		foundS3Bucket, foundS3FilePath, err = cli.WaitForExportImageCompletion(amiToExport, "", time.Minute*15)
+		if err != nil {
+			log.Fatalf("Exporting of AMI %s to s3 failed: %v", amiToExport, err)
+		}
 	} else {
 		log.Printf("Found existing s3 export for ami %s", amiToExport)
 	}
+
+	log.Printf("AMI is exported to s3 bucket: [%s] at file path [%s]", foundS3Bucket, foundS3FilePath)
+
 }
