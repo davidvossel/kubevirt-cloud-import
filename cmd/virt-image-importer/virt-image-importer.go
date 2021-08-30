@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -22,9 +23,10 @@ type client struct {
 }
 
 const (
-	ExportImageFormat = "vmdk"
-	S3PrefixFormat    = "kubevirt-image-exports/orig-%s-"
-	OrigAmiTagKey     = "original-ami"
+	ExportImageFormat        = "vmdk"
+	ExportImageFormatTypeKey = "image-format"
+	S3PrefixFormat           = "kubevirt-image-exports/orig-%s-"
+	OrigAmiTagKey            = "original-ami"
 )
 
 func NewClient(region string) (*client, error) {
@@ -76,14 +78,12 @@ func (c *client) FindGlobalImageById(amiId string) (*types.Image, error) {
 
 func (c *client) ExportImage(amiId string, s3Bucket string, s3Prefix string, imageFormat string) (string, error) {
 
-	if imageFormat != "vmdk" {
-		return "", fmt.Errorf("Image format %s is unsupported, only image format 'vmdk' is supported", imageFormat)
-	}
-
-	tagKey := OrigAmiTagKey
+	tagAmiKey := OrigAmiTagKey
+	tagImageFormatKey := ExportImageFormatTypeKey
+	tagImageFormatVal := ExportImageFormat
 	description := fmt.Sprintf("Exporting ami %s for import into KubeVirt cluster", amiId)
 	params := &ec2.ExportImageInput{
-		DiskImageFormat: types.DiskImageFormatVmdk,
+		DiskImageFormat: ExportImageFormat,
 		ImageId:         &amiId,
 		S3ExportLocation: &types.ExportTaskS3LocationRequest{
 			S3Bucket: &s3Bucket,
@@ -95,8 +95,12 @@ func (c *client) ExportImage(amiId string, s3Bucket string, s3Prefix string, ima
 				ResourceType: types.ResourceTypeExportImageTask,
 				Tags: []types.Tag{
 					{
-						Key:   &tagKey,
+						Key:   &tagAmiKey,
 						Value: &amiId,
+					},
+					{
+						Key:   &tagImageFormatKey,
+						Value: &tagImageFormatVal,
 					},
 				},
 			},
@@ -120,13 +124,21 @@ func (c *client) ExportImage(amiId string, s3Bucket string, s3Prefix string, ima
 
 func (c *client) GetExportTaskStatus(exportTaskId string, amiId string) (s3Bucket string, s3FilePath string, completed bool, exists bool, err error) {
 
-	filterName := fmt.Sprintf("tag:%s", OrigAmiTagKey)
-	filterValues := []string{amiId}
+	filterAmiName := fmt.Sprintf("tag:%s", OrigAmiTagKey)
+	filterAmiValues := []string{amiId}
+
+	filterFormatName := fmt.Sprintf("tag:%s", ExportImageFormatTypeKey)
+	filterFormatValues := []string{ExportImageFormat}
+
 	params := &ec2.DescribeExportImageTasksInput{
 		Filters: []types.Filter{
 			{
-				Name:   &filterName,
-				Values: filterValues,
+				Name:   &filterAmiName,
+				Values: filterAmiValues,
+			},
+			{
+				Name:   &filterFormatName,
+				Values: filterFormatValues,
 			},
 		},
 	}
@@ -152,7 +164,7 @@ func (c *client) GetExportTaskStatus(exportTaskId string, amiId string) (s3Bucke
 		}
 
 		s3Bucket = *task.S3ExportLocation.S3Bucket
-		s3FilePath = fmt.Sprintf("%s%s.%s", *task.S3ExportLocation.S3Prefix, *task.ExportImageTaskId, ExportImageFormat)
+		s3FilePath = fmt.Sprintf("%s%s.%s", *task.S3ExportLocation.S3Prefix, *task.ExportImageTaskId, strings.ToLower(ExportImageFormat))
 		completed = true
 		break
 	}
@@ -185,8 +197,8 @@ func (c *client) WaitForExportImageCompletion(amiId string, taskId string, timeo
 				log.Printf("err encountered looking up task id %s: %v", taskId, err)
 				continue
 			} else if !exists {
-				log.Printf("Task id %s does not exist", taskId)
-				return
+				log.Printf("Task id %s does not exist, waiting for task to become available", taskId)
+				continue
 			} else if completed {
 				log.Printf("Task id %s completed", taskId)
 				return
