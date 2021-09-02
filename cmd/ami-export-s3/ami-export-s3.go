@@ -165,42 +165,22 @@ func main() {
 		pvcStorageClass,
 		pvcAccessMode,
 		foundS3Bucket,
+		region,
 		foundS3FilePath,
 		s3SecretName,
 		pvcSizeQuantity)
-	/*
-			dataVolume := &cdiv1.DataVolume{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pvcName,
-					Namespace: pvcNamespace,
-				},
-				Spec: cdiv1.DataVolumeSpec{
-					Source: &cdiv1.DataVolumeSource{
-						S3: &cdiv1.DataVolumeSourceS3{
-							URL:       fmt.Sprintf("https://%s.s3.us-west-2.amazonaws.com/%s", foundS3Bucket, foundS3FilePath),
-							SecretRef: s3SecretName,
-						},
-					},
-					PVC: &corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.PersistentVolumeAccessMode(pvcAccessMode)},
-						Resources: corev1.ResourceRequirements{
-							Requests: make(corev1.ResourceList),
-						},
-					},
-				},
-			}
 
-			if pvcStorageClass != "" {
-				dataVolume.Spec.PVC.StorageClassName = &pvcStorageClass
-			}
-
-			dataVolume.Spec.PVC.Resources.Requests[corev1.ResourceStorage] = pvcSizeQuantity
-		_, err = cdiCli.CdiV1beta1().DataVolumes(dataVolume.Namespace).Create(context.Background(), dataVolume, metav1.CreateOptions{})
-	*/
 	if err != nil && !errors.IsAlreadyExists(err) {
 		log.Fatalf("Error encountered creating DataVolume: %v", err)
 	}
 
-	log.Printf("Created DataVolume to import AMI [%s] to pvc [%s/%s]", amiId, pvcName, pvcNamespace)
+	log.Printf("Created DataVolume to import AMI [%s] to pvc [%s/%s]", amiId, pvcNamespace, pvcName)
+
+	err = cdiCli.WaitForS3ImportCompletion(pvcName, pvcNamespace, 15*time.Minute)
+	if err != nil {
+		log.Fatalf("Error encountered while waiting on PVC import: %v", err)
+	}
+
+	log.Printf("Success! AMI [%s] imported into PVC [%s/%s]", amiId, pvcNamespace, pvcName)
 
 }

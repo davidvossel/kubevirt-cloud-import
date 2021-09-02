@@ -3,7 +3,9 @@ package cdi
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
+	"time"
 
 	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -41,6 +43,7 @@ func (c *client) ImportFromS3IntoPvc(pvcName,
 	pvcAccessMode,
 	s3Bucket,
 	s3FilePath,
+	s3Region,
 	s3SecretName string,
 	storageQuantity resource.Quantity,
 
@@ -53,7 +56,7 @@ func (c *client) ImportFromS3IntoPvc(pvcName,
 		Spec: cdiv1.DataVolumeSpec{
 			Source: &cdiv1.DataVolumeSource{
 				S3: &cdiv1.DataVolumeSourceS3{
-					URL:       fmt.Sprintf("https://%s.s3.us-west-2.amazonaws.com/%s", s3Bucket, s3FilePath),
+					URL:       fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s3Bucket, s3Region, s3FilePath),
 					SecretRef: s3SecretName,
 				},
 			},
@@ -76,4 +79,56 @@ func (c *client) ImportFromS3IntoPvc(pvcName,
 		return err
 	}
 	return nil
+}
+
+func (c *client) getDataVolumePhase(name string, namespace string) (cdiv1.DataVolumePhase, error) {
+
+	dv, err := c.cdiClient.CdiV1beta1().DataVolumes(namespace).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return cdiv1.PhaseUnset, err
+	}
+
+	return dv.Status.Phase, nil
+
+}
+
+func (c *client) WaitForS3ImportCompletion(pvcName string, pvcNamespace string, timeout time.Duration) error {
+	var completed bool
+	ticker := time.NewTicker(timeout).C
+	pollTicker := time.NewTicker(time.Second * 15).C
+
+	fn := func() (bool, error) {
+		log.Printf("Polling DataVolume %s/%s to determine if import is completed", pvcNamespace, pvcName)
+		phase, err := c.getDataVolumePhase(pvcName, pvcNamespace)
+		if err != nil {
+			return false, err
+		} else if phase == cdiv1.Succeeded {
+			return true, nil
+		} else if phase == cdiv1.Failed {
+			return false, fmt.Errorf("DataVolume %s/%s failed to import into pvc", pvcNamespace, pvcName)
+		}
+		return false, nil
+	}
+
+	completed, err := fn()
+	if err != nil {
+		return err
+	} else if completed {
+		return nil
+	}
+
+	// if not available, poll until available or timeout is hit
+	for {
+		select {
+		case <-ticker:
+			return fmt.Errorf("timed out waiting for datavolume %s/%s to complete", pvcNamespace, pvcName)
+		case <-pollTicker:
+			completed, err := fn()
+			if err != nil {
+				return err
+			} else if completed {
+				return nil
+			}
+		}
+	}
 }
