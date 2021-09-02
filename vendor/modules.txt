@@ -255,6 +255,7 @@ k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
 # k8s.io/apimachinery v0.22.1 => k8s.io/apimachinery v0.22.1
+## explicit
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/resource
 k8s.io/apimachinery/pkg/apis/meta/v1
@@ -289,7 +290,7 @@ k8s.io/apimachinery/pkg/util/yaml
 k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/client-go v8.0.0+incompatible => k8s.io/client-go v0.22.1
+# k8s.io/client-go v12.0.0+incompatible => k8s.io/client-go v0.22.1
 ## explicit
 k8s.io/client-go/discovery
 k8s.io/client-go/kubernetes/scheme
@@ -321,20 +322,18 @@ k8s.io/klog/v2
 k8s.io/kube-openapi/pkg/common
 # k8s.io/utils v0.0.0-20210707171843-4b05e18ac7d9
 k8s.io/utils/integer
+# kubevirt.io/client-go v0.44.1
+## explicit
+kubevirt.io/client-go/generated/containerized-data-importer/clientset/versioned
+kubevirt.io/client-go/generated/containerized-data-importer/clientset/versioned/scheme
+kubevirt.io/client-go/generated/containerized-data-importer/clientset/versioned/typed/core/v1beta1
+kubevirt.io/client-go/generated/containerized-data-importer/clientset/versioned/typed/upload/v1beta1
 # kubevirt.io/containerized-data-importer v1.38.0
 ## explicit
 kubevirt.io/containerized-data-importer/pkg/apis/core
-kubevirt.io/containerized-data-importer/pkg/apis/core/v1alpha1
 kubevirt.io/containerized-data-importer/pkg/apis/core/v1beta1
 kubevirt.io/containerized-data-importer/pkg/apis/upload
-kubevirt.io/containerized-data-importer/pkg/apis/upload/v1alpha1
 kubevirt.io/containerized-data-importer/pkg/apis/upload/v1beta1
-kubevirt.io/containerized-data-importer/pkg/client/clientset/versioned
-kubevirt.io/containerized-data-importer/pkg/client/clientset/versioned/scheme
-kubevirt.io/containerized-data-importer/pkg/client/clientset/versioned/typed/core/v1alpha1
-kubevirt.io/containerized-data-importer/pkg/client/clientset/versioned/typed/core/v1beta1
-kubevirt.io/containerized-data-importer/pkg/client/clientset/versioned/typed/upload/v1alpha1
-kubevirt.io/containerized-data-importer/pkg/client/clientset/versioned/typed/upload/v1beta1
 # kubevirt.io/controller-lifecycle-operator-sdk v0.2.1-0.20210723143736-64585ea1d1bd
 kubevirt.io/controller-lifecycle-operator-sdk/pkg/sdk/api
 # sigs.k8s.io/structured-merge-diff/v4 v4.1.2

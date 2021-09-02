@@ -7,7 +7,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.14.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.13.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.6.2
-	k8s.io/client-go v8.0.0+incompatible
+	k8s.io/apimachinery v0.22.1
+	k8s.io/client-go v12.0.0+incompatible
+	kubevirt.io/client-go v0.44.1
 	kubevirt.io/containerized-data-importer v1.38.0
 )
 
