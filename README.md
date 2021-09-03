@@ -53,5 +53,53 @@ $ ./import-ami --s3-bucket $S3_BUCKET --region $AWS_REGION --ami-id $AMI_ID --pv
 
 ## Tekton AMI Import
 
-WIP
+**Step 1: Install Tekton + Tekton Tasks**
+
+```bash
+# install tekton
+kubectl apply --filename https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
+
+# install kubevirt tekton tasks
+export kv_tekton_release=v0.3.1
+k apply -f https://github.com/kubevirt/kubevirt-tekton-tasks/releases/download/${kv_tekton_release}/kubevirt-tekton-tasks-kubernetes.yaml 
+
+# install cloud import tekton tasks
+kubectl apply --filename https://raw.githubusercontent.com/davidvossel/kubevirt-cloud-import/main/tasks/import-ami/manifests/import-ami.yaml 
+
+```
+
+**Step 2: Create a Pipeline**
+
+An example pipeline can be found [here](https://raw.githubusercontent.com/davidvossel/kubevirt-cloud-import/main/examples/create-vm-from-ami-pipeline.yaml)
+```bash
+kubectl apply --filename https://raw.githubusercontent.com/davidvossel/kubevirt-cloud-import/main/examples/create-vm-from-ami-pipeline.yaml
+```
+
+Create a pipeline run. An example can be found [here](https://raw.githubusercontent.com/davidvossel/kubevirt-cloud-import/main/examples/create-vm-from-ami-pipeline-run.yaml)
+
+**Step 3: Execute the pipeline run**
+
+
+Post the pipeline run, which will kick off all the automation of importing the AMI and creating the VM
+```bash
+kubectl -apply --filename https://raw.githubusercontent.com/davidvossel/kubevirt-cloud-import/main/examples/create-vm-from-ami-pipeline-run.yaml
+```
+
+Watch for the pipeline run to complete
+
+```bash
+$ kubectl get pipelinerun -n kubevirt
+selecting docker as container runtime
+NAME                      SUCCEEDED   REASON      STARTTIME   COMPLETIONTIME
+my-vm-creation-pipeline   True        Succeeded   11m         9m54s
+```
+
+Observe that the VM's VMI is online and running
+```bash
+$ kubectl get vmi -n kubevirt
+selecting docker as container runtime
+NAME          AGE   PHASE     IP               NODENAME   READY
+vm-fedora34   11m   Running   10.244.196.175   node01     True
+
+```
 
