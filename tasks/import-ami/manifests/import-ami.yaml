@@ -1,0 +1,105 @@
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: import-ami
+spec:
+  params:
+    - description: S3 bucket used to export ami file to KubeVirt
+      name: s3Bucket
+      type: string
+    - description: Secret containing aws credentials with IAM role capable of reading contents from the s3 bucket
+      name: s3ReadCredentialsSecret
+      type: string
+    - description: AWS Region
+      name: awsRegion
+      type: string
+    - description: AMI ID to export
+      name: amiId
+      type: string
+    - description: PVC storage class to use for imported AMI
+      name: pvcStorageClass
+      type: string
+    - description: PVC Name to use for imported AMI
+      name: pvcName
+      type: string
+    - description: PVC Namespace to use for imported AMI
+      name: pvcNamespace
+      type: string
+    - description: Storage size required for pvc
+      name: pvcSize
+      type: string
+    - description: PVC access mode
+      name: pvcAccessMode
+      type: string
+    - description: Secret containing aws credentials with IAM role capable of copying AMI and exporting AMI to S3
+      name: awsCredentialsSecret
+      type: string
+  steps:
+    - name: import-ami-to-pvc
+      image: quay.io/dvossel/import-ami
+      command:
+        - import-ami
+      args:
+        - '--s3-bucket'
+        - $(params.s3Bucket)
+        - '--s3-secret'
+        - $(params.s3ReadCredentialsSecret)
+        - '--region'
+        - $(params.awsRegion)
+        - '--ami-id'
+        - $(params.amiId)
+        - '--pvc-storageclass'
+        - $(params.pvcStorageClass)
+        - '--pvc-name'
+        - $(params.pvcName)
+        - '--pvc-namespace'
+        - $(params.pvcNamespace)
+        - '--pvc-size'
+        - $(params.pvcSize)
+        - '--pvc-accessmode'
+        - $(params.pvcAccessMode)
+      env:
+        - name: AWS_DEFAULT_REGION
+          value: $(params.awsRegion)
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: $(params.awsCredentialsSecret)
+              key: accessKeyId
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: $(params.awsCredentialsSecret)
+              key: secretKey
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: import-ami-task
+rules:
+  - verbs:
+      - get
+      - create
+    apiGroups:
+      - cdi.kubevirt.io
+    resources:
+      - datavolumes
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: import-ami-task
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: import-ami-task
+roleRef:
+  kind: ClusterRole
+  name: import-ami-task
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: import-ami-task

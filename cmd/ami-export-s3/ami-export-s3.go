@@ -17,6 +17,10 @@ const (
 	S3PrefixFormat    = "kubevirt-image-exports/orig-%s-"
 )
 
+// TODO
+// Rename cmd to import-ami
+// Require pvc-size or auto detect an approperiate size
+
 func main() {
 
 	var region string
@@ -56,6 +60,15 @@ func main() {
 
 	if pvcName == "" {
 		pvcName = amiId
+	}
+	if pvcNamespace == "" {
+		pvcNamespace = "default"
+	}
+	if pvcAccessMode == "" {
+		pvcAccessMode = "ReadWriteOnce"
+	}
+	if pvcSize == "" {
+		pvcSize = "6Gi"
 	}
 
 	pvcSizeQuantity := resource.MustParse(pvcSize)
