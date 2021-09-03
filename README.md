@@ -35,13 +35,13 @@ export AMI_ID=ami-00a4fdd3db8bb2851
 export PVC_STORAGECLASS=rook-ceph-block
 export PVC_NAME=fedora34-golden-image
 
-ami-export-s3 --s3-bucket $S3_BUCKET --region $AWS_REGION --ami-id $AMI_ID --pvc-storageclass $PVC_STORAGECLASS --s3-secret $S3_SECRET --pvc-name $PVC_NAME
+import-ami --s3-bucket $S3_BUCKET --region $AWS_REGION --ami-id $AMI_ID --pvc-storageclass $PVC_STORAGECLASS --s3-secret $S3_SECRET --pvc-name $PVC_NAME
 ```
 
 Example Output
 
 ```
-$ ./ami-export-s3 --s3-bucket $S3_BUCKET --region $AWS_REGION --ami-id $AMI_ID --pvc-storageclass $PVC_STORAGECLASS --s3-secret $S3_SECRET --pvc-name $PVC_NAME
+$ ./import-ami --s3-bucket $S3_BUCKET --region $AWS_REGION --ami-id $AMI_ID --pvc-storageclass $PVC_STORAGECLASS --s3-secret $S3_SECRET --pvc-name $PVC_NAME
 2021/09/02 17:02:44 Image is owned by another account 125523088429. Client account is 269733383066
 2021/09/02 17:02:45 Found local copy of image named [ami-0d8e0766632b22bc0] in client's account
 2021/09/02 17:02:45 Found existing s3 export for ami ami-0d8e0766632b22bc0

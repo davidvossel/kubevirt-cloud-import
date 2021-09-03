@@ -14,7 +14,7 @@ export GO111MODULE=on
 build:
 	@echo "Building binary"
 	mkdir -p build/_output/bin
-	env GOOS=$(TARGET_GOOS) GOARCH=$(TARGET_GOARCH) go build -i -ldflags="-s -w" -mod=vendor -o build/_output/bin/ami-export-s3 ./cmd/ami-export-s3
+	env GOOS=$(TARGET_GOOS) GOARCH=$(TARGET_GOARCH) go build -i -ldflags="-s -w" -mod=vendor -o build/_output/bin/import-ami ./cmd/import-ami
 
 deps-update:
 	go mod tidy && \
