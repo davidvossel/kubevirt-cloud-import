@@ -38,9 +38,9 @@ spec:
       type: string
   steps:
     - name: import-ami-to-pvc
-      image: quay.io/dvossel/import-ami
+      image: quay.io/dvossel/import-ami:latest
       command:
-        - import-ami
+        - /import-ami
       args:
         - '--s3-bucket'
         - $(params.s3Bucket)

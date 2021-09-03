@@ -13,8 +13,16 @@ export GO111MODULE=on
 
 build:
 	@echo "Building binary"
-	mkdir -p build/_output/bin
-	env GOOS=$(TARGET_GOOS) GOARCH=$(TARGET_GOARCH) go build -i -ldflags="-s -w" -mod=vendor -o build/_output/bin/import-ami ./cmd/import-ami
+	mkdir -p build/_output/bin/import-ami
+	env GOOS=$(TARGET_GOOS) GOARCH=$(TARGET_GOARCH) go build -i -ldflags="-s -w" -mod=vendor -o build/_output/bin/import-ami/import-ami ./cmd/import-ami
+	cp ./images/import-ami/Dockerfile build/_output/bin/import-ami/Dockerfile
+
+container-build: build
+	docker build -t import-ami:latest -f build/_output/bin/import-ami/Dockerfile build/_output/bin/import-ami/
+
+container-push: container-build
+	docker image tag import-ami:latest quay.io/dvossel/import-ami:latest
+	docker push quay.io/dvossel/import-ami:latest
 
 deps-update:
 	go mod tidy && \
