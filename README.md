@@ -10,7 +10,11 @@ Automation for importing an AMI into KubeVirt works by exporting the AMI as a vd
 Before importing an AMI via the cli command or using the Tekton task, the following prerequisites must be met.
 - Create the [AWS vmimport service role](https://docs.aws.amazon.com/vm-import/latest/userguide/vmie_prereqs.html#vmimport-role) which is required in order to allow AWS to export an AMI to an s3 bucket on your behalf.
 - Create an S3 bucket that will be used to export the AMI to KubeVirt
-- Create an access credential secret in the k8s that gives permission to retrieve data from the s3 bucket your AMI will be stored in.
+- Create an access credential secret in the k8s that gives permission to...
+	- retrieve data from the s3 bucket your AMI will be stored in
+	- execute the export-image command
+
+More info related to the AWS export-image functionality can be found [here](https://docs.aws.amazon.com/vm-import/latest/userguide/vmexport_image.html)
 
 Below is an example of how the access credential secret is formatted.
 ```yaml
