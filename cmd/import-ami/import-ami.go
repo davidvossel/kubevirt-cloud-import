@@ -178,8 +178,8 @@ func main() {
 		pvcStorageClass,
 		pvcAccessMode,
 		foundS3Bucket,
-		region,
 		foundS3FilePath,
+		region,
 		s3SecretName,
 		pvcSizeQuantity)
 
