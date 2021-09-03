@@ -1,0 +1,33 @@
+
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: my-vm-creation-pipeline
+  namespace: kubevirt
+spec:
+  serviceAccountName: kubevirt-controller
+  pipelineRef:
+    name: create-vm-pipeline 
+  params:
+    - name: vmName
+      value: vm-fedora34
+    - name: s3Bucket
+      value: my-kubevirt-exports
+    - name: s3ReadCredentialsSecret
+      value: my-s3-secret
+    - name: awsRegion
+      value: us-west-2
+    - name: amiId 
+      value: ami-00a4fdd3db8bb2851
+    - name: pvcStorageClass 
+      value: rook-ceph-block
+    - name: pvcName
+      value: fedora34
+    - name: pvcNamespace
+      value: kubevirt
+    - name: pvcSize
+      value: 6Gi
+    - name: pvcAccessMode
+      value: ReadWriteOnce
+    - name: awsCredentialsSecret
+      value: my-aws-secret
